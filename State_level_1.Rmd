@@ -1,0 +1,95 @@
+---
+title: "Arrange State Level Data"
+author: "Manish"
+date: "6/5/2020"
+output: html_document
+---
+## Introduction
+
+The New York Times github site stores country, state and county level data. We will work with the state and county level data. We will use the data that is updated every day and not the one called 'live' which is perhaps updated more frequently. First load all the libraries that we will need and also install census API key in your R environment. You can get a Census API key from https://api.census.gov/data/key_signup.html.  
+
+```{r, echo=FALSE, results='hide', warning=FALSE, message=FALSE}
+
+library(sf)
+library(tidycensus)
+library(tigris)
+library(ggplot2)
+library(data.table)
+library(dplyr)
+library(data.table)
+library(USAboundaries)
+library(leaflet)
+library(classInt)
+library(RColorBrewer)
+
+#census_api_key('Your API key here', overwrite = FALSE, install = TRUE)
+```
+To download covid-19 data from New York Times COVID-19 github site - run the following command from your terminal window, assuming that you are on a Mac and you have git isntalled. 
+
+*cd ('Path to the directory to where you want the repository to be downloaded')
+mkdir 'covid19'
+cd covid19
+git clone https://github.com/nytimes/covid-19-data.git*
+
+We want to read the data and attach geographical and population information from Census. Our aim is to convert the data into a 'sf' object so that we can map it. If you are more familiar with the 'sp' objects, it is trivial to convert between 'sp' and 'sf' objects. The data has total number of cases and deaths up to a given date for each state. We will look at aggregate number of cases and will create static maps. Although, it is a very simple data it is important that you understand the data well. It is a cardinal principle of any data-based investigation and knowledge building: there should be no ambiguities in your understanding of the data.  
+```{r}
+#Print the first row, see column headings, and decide about the column classes. 
+
+fileName = '/Users/manishve/Documents/cscar/teaching/2020/covid-19-workshop/covid-19-data/us-states.csv'
+print(fread(fileName, nrows = 1))
+
+covid.state = read.csv(fileName, stringsAsFactors = FALSE, colClasses = c('Date', 'character', 'character', 'integer', 'integer'))
+head(covid.state)
+covid.state = covid.state[c('date',  'fips', 'cases', 'deaths')]
+
+```
+Let us do some sanity checks, including some visualization, and get familiar with the data. We want to aggregate the data over time for each state so that we get the latest total number of cases and deaths. Note that we are choosing the maxinum number of cases below, assuming that it represents the cumulative total. We are also assuming that we have complete data for each state. Based on what we see in the data and the plot below for Michigan, both are reasonable assumptions, but please read more about the data at the NYTIMES github site if you actually intend to use this data for reasearch.   
+
+```{r}
+head(covid.state[order(covid.state$cases),])      
+tail(covid.state[order(covid.state$cases),]) 
+length(unique(covid.state$fips))       
+print(unique(covid.state$fips))
+
+#Select any state and plot - Michigan's fips code is 26 
+mi.cases = covid.state[covid.state$fips %in% '26', ] %>% arrange(date)
+ggplot(data = mi.cases) + geom_point(aes(x  = date, y = cases))
+
+# Now summarize
+covid.state.total = covid.state[c('fips', 'cases', 'deaths')] %>% group_by(fips) %>% summarise('cases' = max(cases, na.rm = T), 'deaths' = max(deaths, na.rm = T))
+covid.state.total = covid.state.total[!is.na(covid.state.total$cases),]
+```
+Now download Census data. We need state level geometries and total population since we will examine the spatial distribution of state level case counts relative to total population. Census annually updates any changes in boundaries and you might find at least some changes for smaller census units such as blocks and tracts. Here I am downloading the data for the default year, which I think is 2018 (read tidycensus documentation). The boundary files for 2019 are not yet available as of May 1, 2020, but check this site https://www.census.gov/geographies/mapping-files/time-series/geo/carto-boundary-file.html. We are downloading a coarse resolution (1:5 million) state boundary file so that R can display our maps fast. You can choose the default 1:500 k resolution, which takes up about four times more memory, takes more time to display, but gives you better accuracy. 
+
+In the interest of time we will work with only the contiguous USA (the lower-48) since R takes a lot more time to display maps with with Alaska, Hawaii, and island territories. We will need two letters code for each state, attach it to the sf object.     
+
+```{r, echo=FALSE, results='hide', warning=FALSE, message=FALSE}
+us.state = states (cb = TRUE, resolution = '5m', year=2018, class = 'sf')
+head(us.state)         
+us.state = us.state[c('GEOID', 'ALAND')]  # GEOID is the fips code 
+
+# Join the two data - we will work with default WGS84
+state.total = inner_join(us.state, covid.state.total, by = c("GEOID" = "fips"))
+head(state.total)
+
+# Select only conus, so remove Hawaii, Alaska etc. Alos remove above 56, these are islands including Puerto Rico (72).
+
+index = state.total$GEOID %in% c('02', '15', '66', '69', '72', '78')
+state.total = state.total[!index,]
+
+# Plot to make sure
+plot(st_geometry(state.total))
+
+# State code
+ab.code = state_codes
+head(ab.code)
+ab.code = ab.code[c('state_abbr', 'state_code')]
+state.total = left_join(state.total, ab.code, by = c('GEOID' = 'state_code'))
+state.total = st_as_sf(state.total)  # I want geometry to be the last column in display
+
+
+# Save this as GeoPackage if you want to open it in QGIS
+st_write(state.total, '~/Desktop/covid.gpkg', driver = 'GPKG')
+```
+
+
