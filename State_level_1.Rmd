@@ -35,7 +35,7 @@ We want to read the data and attach geographical and population information from
 ```{r}
 #Print the first row, see column headings, and decide about the column classes. 
 
-fileName = '/Users/manishve/Documents/cscar/teaching/2020/covid-19-workshop/covid-19-data/us-states.csv'
+fileName = 'covid-19-data/us-states.csv'
 print(fread(fileName, nrows = 1))
 
 covid.state = read.csv(fileName, stringsAsFactors = FALSE, colClasses = c('Date', 'character', 'character', 'integer', 'integer'))
