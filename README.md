@@ -1,4 +1,4 @@
-# Mapping-COVID-19
+# Mapping COVID-19
 Basic mapping principles for COVID-19 data from NYTIMES
 
 The New York Times provides state and county level data about COVID-19 cases at https://github.com/nytimes/covid-19-data. The R Markdown files here discuss approches to discritize the data and plot both static maps using ggplot and somewhat interactive webmaps 
