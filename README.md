@@ -1,4 +1,4 @@
-# Mapping COVID-19 Basic mapping principles for COVID-19 data from NYTIMES
+# Mapping COVID-19
 
 The New York Times provides state and county level data about
 COVID-19 cases at https://github.com/nytimes/covid-19-data. The R
