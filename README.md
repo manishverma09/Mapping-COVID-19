@@ -14,9 +14,7 @@ resize your image (make thumbnails) so that they are easy to display.
 
 ![Map of cases per 1000 population](image/Rplot.png)
 
-An interactive map
-
-[An interative map showing case count and case ratio per 1000
+[An interactive map showing case count and case ratio per 1000
 persons](https://manishverma09.github.io/Mapping-COVID-19/image/covid_state.html) 
 
 
