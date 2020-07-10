@@ -12,11 +12,10 @@ background. As we saw in the workshop, if you want to have a pop-up
 showing temporal profile of COVID cases for each state (or county),
 resize your image (make thumbnails) so that they are easy to display. The two maps below show numbers upto May 17th, 2020. 
 
+The key point in both signgle and bivariate map is that you should apply objective criteria to narrow down to a clustering scheme. Your groupings should faithfylly cpature the complexities in the data, but should also convey the main message via simple and efficient color or other symbols.  
+
 ![Map of cases per 1000 population](image/Rplot.png)
 
 [An interactive map showing case count and case ratio per 1000
 persons](https://manishverma09.github.io/Mapping-COVID-19/image/covid_state.html) 
 
-
-I will add more material realted to bivariate and multivariate maps
-sometime soon.
