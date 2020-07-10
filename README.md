@@ -10,7 +10,7 @@ map making with the mapping functionalities of R and QGIS in the
 context of COVID-19 data. Accompanying slides provide some conceptual
 background. As we saw in the workshop, if you want to have a pop-up
 showing temporal profile of COVID cases for each state (or county),
-resize your image (make thumbnails) so that they are easy to display.
+resize your image (make thumbnails) so that they are easy to display. The two maps below show numbers upto May 17th, 2020. 
 
 ![Map of cases per 1000 population](image/Rplot.png)
 
