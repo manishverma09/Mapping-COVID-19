@@ -1,0 +1,174 @@
+---
+title: "State-level bivariate map"
+author: "Manish"
+date: "5/28/2020"
+output:
+  html_document: default
+  pdf_document: default
+---
+## 3.1. Bivariate map of state level data
+We will try to use color for one variable and a symbol for the other variable. If you are not familiar with the data, or want to brush-up what we discussed about single variable chotopleth map, please consult notes from the first workshop. A lot of what we discussed in the earlier workshop is relevant here. You can find it in the R Markdown files at the GitHub site      
+
+```{r}
+invisible(lapply(c('sp', 'sf', 'classInt', 'RColorBrewer', 'ggplot2', 'leaflet', 'tidycensus', 'data.table', 'dplyr', 'tigris', 'USAboundaries'), require, character.only=TRUE))
+#Print the first row, see column headings, and decide about the column classes. 
+
+fileName = '/Users/manishve/Documents/cscar/teaching/2020/covid-19-workshop/workshop2/covid-19-data/us-states.csv'
+print(fread(fileName, nrows = 1))
+
+covid.state = read.csv(fileName, stringsAsFactors = FALSE, colClasses = c('Date', 'character', 'character', 'integer', 'integer'))
+head(covid.state)
+covid.state = covid.state[c('date',  'fips', 'cases', 'deaths')]
+
+```
+Let us do some sanity checks, including some visualization, and get familiar with the data. We want to aggregate the data over time for each state so that we get the latest total number of cases and deaths. Note that we are choosing the maxinum number of cases below, assuming that it represents the cumulative total. We are also assuming that we have complete data for each state. Based on what we see in the data and the plot below for Michigan, both are reasonable assumptions, but please read more about the data at the NYTIMES github site if you actually intend to use this data for reasearch. The occasional jumps in the graph perhpas represent the weekend-effect.    
+
+```{r}
+head(covid.state[order(covid.state$cases),])      
+tail(covid.state[order(covid.state$cases),]) 
+length(unique(covid.state$fips))       
+print(unique(covid.state$fips))
+
+#Select any state and plot - Michigan's fips code is 26 
+mi.cases = covid.state[covid.state$fips %in% '26', ] %>% arrange(date)
+ggplot(data = mi.cases) + geom_point(aes(x  = date, y = cases))
+
+# Now summarize
+covid.state.total = covid.state[c('fips', 'cases', 'deaths')] %>% group_by(fips) %>% summarise('cases' = max(cases, na.rm = T), 'deaths' = max(deaths, na.rm = T))
+covid.state.total = covid.state.total[!is.na(covid.state.total$cases),]
+```
+Now download Census data. This is data from 2010 and sufficient for the purpose of learning here. In the interest of time we will work with only the contiguous USA (the lower-48) since R takes a lot more time to display maps with with Alaska, Hawaii, and island territories. We will need two letters code for each state, attach it to the sf object.     
+
+```{r,  results='hide', warning=FALSE, message=FALSE}
+us.state = states (cb = TRUE, resolution = '5m', year=2018, class = 'sf')
+head(us.state)         
+us.state = us.state[c('GEOID', 'ALAND')]  # GEOID is the fips code 
+
+# Join the two data - we will work with default WGS84
+state.total = inner_join(us.state, covid.state.total, by = c("GEOID" = "fips"))
+head(state.total)
+
+# Select only conus, so remove Hawaii, Alaska etc. Alos remove above 56, these are islands including Puerto Rico (72).
+
+index = state.total$GEOID %in% c('02', '15', '66', '69', '72', '78')
+state.total = state.total[!index,]
+
+# State code
+ab.code = state_codes
+head(ab.code)
+ab.code = ab.code[c('state_abbr', 'state_code')]
+state.total = left_join(state.total, ab.code, by = c('GEOID' = 'state_code'))
+state.total = st_as_sf(state.total)  # I want geometry to be the last column in display
+
+# Save this as GeoPackage if you want to open it in QGIS
+#st_write(state.total, '~/Desktop/covid.gpkg', driver = 'GPKG')
+
+# Plot to make sure
+plot(st_geometry(state.total))
+state.total = state.total[c('GEOID', 'cases', 'deaths', 'state_abbr')]
+```
+We will work with the number of COVID cases and case ratio in each state. Again, please refer to the notes and codes from Workshop I to see how you want to group or partition the attribute values. We are downloading total population from the Census for 2010. You can get the latest estimates if you want more accuracy. Your Census API Key should be in your R environment. 
+
+```{r Fig1, echo=TRUE, fig.height=3, fig.width= 7}
+total.pop = get_decennial(geography = 'state', variables = 'P001001', year=2010, geometry = FALSE)
+setnames(total.pop, 'value', 'Population')
+total.pop = total.pop [c('GEOID', 'Population')]
+state.total = left_join(state.total, total.pop, by = 'GEOID')
+state.total ['CasePer1000'] = (state.total$cases / state.total$Population)*1000
+
+cases.cum = ecdf(state.total$cases)
+caseratio.cum = ecdf(state.total$CasePer1000)
+
+par(mfrow = c(1,2))
+plot(cases.cum, main = 'Cumulative', xlab = 'Number of cases')
+plot(caseratio.cum, main = 'Case Ratio', xlab = 'Cases per 1000 persons')
+
+```
+Given these two variables we need to decide how to categorize them and map one of them to a color scheme and the other to the size of a symbol. In the case of single variable choropleth map, I argued against nonlinear transformation of the data. But, if I have to do a transformation, I generally find^[I do not know if rigorous studies confirm this] that a log10 is easy to understand.  
+
+ I will choose 5 clusters for all the subsequent analysis, but you must remember that this is a  'free parameter' in your chloropleth map. Ideally you would like to "experiment" a bit and narrow down to something that strikes a balance between faithfully representing the information and condensing it in a few categories so that your reader can quickly grasp the message. 
+
+```{r}
+grQ = classIntervals(state.total$cases, n = 5, style = 'quantile')
+
+display.brewer.pal(5, 'BuGn')  
+display.brewer.pal(5, 'Greys')
+
+colPal1 = brewer.pal(5, 'BuGn')
+plot(grQ, colPal1, main = 'Quantiles', xlab = 'No of Cases', ylab = 'Relative Frequency')
+
+```
+Look at the color coding at the bottom of the plots and note how case counts are grouped. I am printing only two classifications, but you can use the code above to try the third one too. Do any of the three partitions we tried - 'quantile', 'jenks', or 'fisher' - satisfy you? Do these schemes help you summarize the data well and also faithfully represent the nuiances in the data?  
+  In addition to having a meaningful partition, there are other points that you should consider. *Ideally your discritization should not be very sensitive to small perturbations in the boundaries, so you should carefully look at the states that are close to partition boundaries. In particular, states that are adjacent to each other in space and are on the either side of the partition boundary in the discritized attribute space deserve close attention.* In the interest of time we will not pursue any of these, but you should try it later. To complete this part let us make a few maps and examine. 
+
+```{r}
+grBreaks = grQ[2]$brks
+grBreaks[1] = grBreaks[1]-1
+state.total['Group1'] = cut(state.total$cases, grBreaks, right=TRUE)
+state.total['Group2'] = cut(state.total$cases, c(400, 1000, 5000, 10000, 40000, 400000), right=TRUE)
+state.total['Group4'] = cut(state.total$CasePer1000, c(0, 1, 5, 10, 15, 21), right=TRUE)
+state.total = state.total[order(state.total$Group1),]
+rownames(state.total) = as.character(1:dim(state.total)[1])
+head(state.total)
+tail(state.total)
+
+```
+
+Now plot with different options. You would perhaps like to see the parititon plot we created earlier and the map above together. You can try 'cowplot' or 'gridExtra'. If you want to format axix lables see this (https://stackoverflow.com/questions/11610377/how-do-i-change-the-formatting-of-numbers-on-an-axis-with-ggplot). 
+
+```{r}
+# If you know mutate, try to use it on state.total instead of the code above
+
+ggplot(data = state.total) + geom_sf(aes(fill=Group1)) + scale_fill_manual(values = colPal1) +labs(fill = 'Case Count')
+label.vec = c('400-1000', '1000-5000', '5000-10000', '10000-40000', '40000-400000' )
+ggplot(data = state.total) + geom_sf(aes(fill=Group2)) + scale_fill_manual(values = colPal1, labels=label.vec) +labs(fill = 'Case Count')
+
+# Let us try to put a symbol at the centroid, this needs projected coordinates
+projString = "+proj=aea +lat_1=20 +lat_2=60 +lat_0=40 +lon_0=-96 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs"
+
+poly.cent =st_transform(state.total['state_abbr'], projString)
+poly.cent = st_centroid(poly.cent)
+poly.cent = st_transform(poly.cent, st_crs(state.total))  # Back to geographic coordinates
+cent.coordinates = st_coordinates(poly.cent)
+poly.cent = data.frame('state_abbr' = poly.cent$state_abbr, 'latitude' = cent.coordinates[,2], 'longitude' = cent.coordinates[,1])
+
+# Join to state.total
+state.total = left_join(state.total, poly.cent, by = 'state_abbr')
+state.total = st_as_sf(state.total)
+
+ 
+```
+Plot with different options for CasePer1000. 
+
+```{r}
+
+# 1. Mapped to a color scheme
+gt1 = ggplot(data = state.total) + geom_sf(aes(fill=Group2)) + scale_fill_manual(values = colPal1, labels=label.vec) +labs(fill = 'Case Count') + geom_point(aes(x = longitude, y = latitude, color = Group4), size=2) + xlab('Longitude') + ylab('Latitude') + labs(color = 'Case-Ratio')
+
+print(gt1)
+
+
+# 2. Mapped to size
+gt2 = ggplot(data = state.total) + geom_sf(aes(fill=Group2)) + scale_fill_manual(values = colPal1, labels=label.vec) +labs(fill = 'Case Count') + geom_point(aes(x = longitude, y = latitude, size = CasePer1000)) +  xlab('Longitude') + ylab('Latitude') 
+
+print(gt2)
+
+# 3. Mapped to shape
+gt3 = ggplot(data = state.total) + geom_sf(aes(fill=Group2)) + scale_fill_manual(values = colPal1, labels=label.vec) +labs(fill = 'Case Count') + geom_point(aes(x = longitude, y = latitude, shape = Group4), size=2) + xlab('Longitude') + ylab('Latitude') + labs(color = 'Case-Ratio')
+
+print(gt3)
+
+
+
+```
+
+Based on the principles we discussed what is wrong with the first and the third maps above? In the first map, the color schume in the filled circles does not have a gradient although we have a numerical variable. Similalry, in the third map the symbols are more appropriate for a categorical variable. If you want to use polygons here you should try and order them, perhaps based on the number of sides. So, your legend should be triangle (3-sides), rectangle (4-sides), pentagon (5-sides), hexagon (6-sides), and septagon (7-sides). 
+
+Modify the color scheme of circle points to show a gradient, pehaps in red color since it will stand out in the green backround of the choropleth map. I will not do it here. Save the dataframes so that we can open them in QGIS.
+
+```{r}
+st_write(state.total, 'state_poly.gpkg')
+state.total.point = st_centroid(state.total)
+st_write(state.total.point, 'state_point.gpkg')
+```
+Now open the two layers in QGIS and style your map. 

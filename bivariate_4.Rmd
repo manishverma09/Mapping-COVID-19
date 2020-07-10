@@ -1,0 +1,319 @@
+---
+title: "Covid-19 and older adults, bivariate map"
+author: "Manish"
+date: "6/2/2020"
+output: html_document
+---
+## 2. Mapping Case Ratio at County Level
+We will work with county level data now. We will follow the same approach here that we did in the case of a single variable map, but in addition to a choropleth map we will also explore alternatives for static bivariate maps. In the later part of this exercise, we will make web-maps that can incorporate bivariate maps and more information via pop-ups and adjacent graphs that you often see at news media websites. As we develop our approche we will try to seek a connection between formal spatial modeling and map visualization. I will be using terms such as risk quite loosely, and you should not interpret it as a precisely defined epidemiological risk at a given time.  
+
+We know that cetrius peribus older adults have much higher hospitalization and mortality rates, if infected. Let us try to create maps that help us understand and investigate the spatial distribution of risk to the older adults. I am not careful in defining our objectives very precisely here, but if you are working on a real project, you would like to have more sharpely defined objectives and goals. 
+Let us first read the data from the New York Times github site.  You will have to run some basic checks to make sure that we understand the data well. Specify the 'column class' argument in the read.csv function. Otherwise, the county fips code gets read as integer. This stips the leading zero from fips code making it a four digit code for some states and counties. County fips code should be 'SSCCC', with the first two for state and next three for county. So, specify a column class for at least 'fips'.
+
+http://lenkiefer.com/2017/04/24/bivariate-map/
+https://rpubs.com/apsteinmetz/prek
+
+``` {r , echo=FALSE, result='hide'}
+pc = invisible(lapply(c('sp', 'sf', 'classInt', 'RColorBrewer', 'ggplot2', 'leaflet', 'tidycensus', 'data.table', 'dplyr', 'tigris', 'leaftime', 'hexbin', 'ggExtra', 'pals', 'biscale', 'cowplot'), require, character.only=TRUE))
+
+covid.county = read.csv('/Users/manishve/Documents/cscar/teaching/2020/covid-19-workshop/workshop2/covid-19-data/us-counties.csv', stringsAsFactors = FALSE,  header = TRUE)
+head(covid.county)
+
+# Reread specifying column classes
+covid.county = read.csv('/Users/manishve/Documents/cscar/teaching/2020/covid-19-workshop/workshop2/covid-19-data/us-counties.csv', stringsAsFactors = FALSE,  header = TRUE, colClasses=c('Date', 'character', 'character', 'character', 'integer', 'integer'))
+covid.county = covid.county[c('date',  'fips', 'cases', 'deaths')]
+tail(covid.county)
+
+# Let us do some sanity checks 
+length(unique(covid.county$fips))        # We get 3407 counties
+print(lookup_code(state = 'MI', county = 'Wayne'))
+
+w.county = covid.county[covid.county$fips %in% '26163', ]
+ggplot (data = w.county) + geom_point(aes(x = date, y = cases)) + xlab('Day since start')
+
+#Aggregate at county level - note that the data is cumulative total for each date
+covid.county.total = covid.county[c('fips', 'cases', 'deaths')] %>% group_by(fips) %>% summarise('cases' = max(cases, na.rm = T), 'deaths' = max(deaths, na.rm = T))
+covid.county.total = covid.county.total[!is.na(covid.county.total$cases),]
+
+
+# Select only conus, so remove Hawaii, Alaska, Puerto Rico (72) etc. visualization will take time with these states.
+index = grepl ('^(02|15|66|69|72|78)', covid.county.total$fips)
+covid.county.total = covid.county.total[!index,]
+```
+## 2.1. Census data
+
+We want to combine it with county level population of older adults. Here are the variables and their census codes that we are interested in.
+
+Total population                      P001001
+Total blacks                          P003003
+ 
+Total sex by age                      P012001
+Total Male                            P012002
+Total!!Male!!65 and 66 years          P012020		SEX BY AGE
+Total!!Male!!67 to 69 years         	P012021		SEX BY AGE
+Total!!Male!!70 to 74 years         	P012022		SEX BY AGE
+Total!!Male!!75 to 79 years         	P012023		SEX BY AGE
+Total!!Male!!80 to 84 years         	P012024		SEX BY AGE
+Total!!Male!!85 years and over      	P012025	
+Total Female                          P012026
+Total!!Female!!65 and 66 years        P012044		SEX BY AGE
+Total!!Female!!67 to 69 years       	P012045		SEX BY AGE
+Total!!Female!!70 to 74 years       	P012046		SEX BY AGE
+Total!!Female!!75 to 79 years       	P012047		SEX BY AGE
+Total!!Female!!80 to 84 years       	P012048		SEX BY AGE
+Total!!Female!!85 years and over    	P012049	
+
+There are no counts for some counties, I want to include these so that we get a complete map for lower 48. 
+
+For those of you interested in GIS, we are saving the file this time as a SpatiLite file. This is another good option for spatial data, in addition to GeoPackage that we used in the last exercise. SpatiaLite is built on top of SQLite and allows SQL queries. Read about it here https://www.gaia-gis.it/fossil/libspatialite/index. If you want to open the file in QGIS just drag and drop it.
+
+Some counties have no data for COVID cases. NAs will create artefacts in maps, so let us set NAs to zero. This is an arbitrary decision for this class. Ideally you would like to deal with it in a principled way, most likely show it in your map as a separate category with 'No Data' label.  
+
+I am downloading data for Census 2010 for this exercise. Download latest population estimates if you want more precision. 
+
+```{r}
+varList = c('P001001',  'P003003', 'P012002', 'P012020', 'P012021', 'P012022', 'P012023', 
+            'P012024', 'P012025', 'P012026', 'P012044', 'P012045', 'P012046', 'P012047', 
+            'P012048', 'P012049')
+
+# I could not make get_decennial work for multiple variables, so running it in a for loop
+for (i in 1:length(varList)){
+  tmp = get_decennial(geography = 'county', variables = varList[i], year=2010, geometry = FALSE)
+  if(i==1) {tmp = tmp[c('GEOID', 'value')]
+            setnames(tmp, 'value', varList[i]) 
+            total.old.popu = tmp} 
+  else { tmp = tmp['value']
+         setnames(tmp, 'value', varList[i])
+         total.old.popu = cbind(total.old.popu, tmp)}}
+
+county.geom = get_decennial(geography = 'county', variables = 'P001001', year=2010, geometry = TRUE)
+
+county.geom = county.geom['GEOID']
+total.old.popu = st_sf(c(total.old.popu, county.geom))
+
+old.male = total.old.popu[c('P012020', 'P012021', 'P012022', 'P012023', 'P012024', 'P012025')]
+st_geometry(old.male) = NULL
+old.male = rowSums(old.male)
+
+old.female = total.old.popu[c('P012044', 'P012045', 'P012046', 'P012047', 'P012048', 'P012049')]
+st_geometry(old.female) = NULL
+old.female = rowSums(old.female)
+
+total.old.popu['old_male'] = old.male
+total.old.popu['old_female'] = old.female
+total.old.popu['all_old'] = old.male + old.female
+total.old.popu['old_proportion'] = (total.old.popu$all_old / total.old.popu$P001001)
+
+total.old.popu = total.old.popu[c('GEOID', 'P001001', 'all_old', 'old_proportion')]
+setnames(total.old.popu, 'P001001', 'total_population')
+index = grepl ('^(02|15|66|69|72|78)', total.old.popu$GEOID)
+total.old.popu = total.old.popu[!index,]
+
+# Join -  
+covid.county.total = left_join(total.old.popu, covid.county.total, by = c('GEOID' = 'fips'))
+covid.county.total['CasesPer1000'] = (covid.county.total$cases/covid.county.total$total_population)*1000
+covid.county.total = st_sf(covid.county.total)
+
+# Save this as a spatialite file, if you want to open it in QGIS
+st_write(covid.county.total, '/Users/manishve/Desktop/covid_county.sqlite', factorsAsCharacter = TRUE)
+head(covid.county.total)
+covid.county.total$CasesPer1000[is.na(covid.county.total$CasesPer1000)] =0
+```
+## 2.2. Clustering data
+
+Note that in order to faciliate direct comparison we have calculated the number of older adults per 1000 population. This will make sure that your denominator is same for both the variables. However, I may use the phrase 'proportion of older adults' in the text below.  
+
+So, we have total population, total older adults, proportion of older adults, number of cases, number of deaths, and the geometry of each county.  We want a map that combines population at higher risk (i.e. older adults) with the total number of cases per thousand (which is a rough measure of prevalence for us). For motivation, you might be interested in highlighting counties where the proportion of older adults and the prevelence (case ratio) are both high. Or, you might want to see variation in case per thousand in each of the low, medium, and high categories of the proportion of older adults. Look at the examples that we have in the workshop slides.  
+
+*Note:* I want to make a point here. You may have noticed that we take geometry as given and fixed, and we focus our efforts entirely on capturing the spatial distribution of attributes well. This need not be the case. You can combine the parittioning of attribute with the partioning of geometry. It is common to pursue this approach with continuous data that you often see in geostatistical literature, but you can implement this with areal data too. We will see a quick example of it later in the notes. For motivation and ideas, look at the references posted in the box-folder.     
+
+Let us visualize the data. The idea is somewhat similar to what we did in the case of a single variable, but we are now looking at two dimensions (similar to joint distribution) and we have a lot more units and therefore a lot more data. Remember that we want to divide our data into a small number of clusters, groups, or categories that capture the essence of what we are interested in, and also faithfully represent the data. This time, let Trumbo's principles (see slides) provide you a loose framework to organize your ideas and data. I am removing one anomalous county with very high CasePer1000 (188) for better visualization. However, high case ratio needs attention so we will print it independently. 
+
+Let us first try with exogeneous categories. The code below partitions the number of older adults per 1000 into four categories: less than 100, between 100 and 200, between 200 and 300, and above 300. Similarly, we demarcate the case count into four categories: less than 5 per 1000, between 5 and 10, between 10 and 15, and above 15. *Conceptually, we are estabilising axis-parallel boundaries with exogeneous criteria which we hope are meaningful from a public-health perspective.* If you do not agree with this scheme, try your own especially if you have a scientific goal and you understand the necessay epidemiological concepts.
+
+```{r}
+index = covid.county.total$CasesPer1000>110      
+x = covid.county.total$old_proportion[!index]*1000;
+y = covid.county.total$CasesPer1000[!index]
+df = data.frame('x' = x, 'y' = y)
+
+ggplot(df, aes(x=x, y=y) ) +
+  geom_hex(bins = 70) +
+  scale_fill_continuous(type = "viridis") +
+  scale_y_continuous(breaks = c(5, 10, 15, 25, 50)) +
+  theme_bw() + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  geom_hline(yintercept = c(5, 10, 15), linetype = 'dashed', color = 'red') + geom_vline(xintercept = c(100, 200, 300), linetype = 'dashed') + xlab('Older adults per 1000') + ylab('Case per 1000')
+
+# Print the case we removed
+print(covid.county.total[index,])
+
+```
+The colorbar shows the number of counties included in the hexagons filled with different colors. The lower left corner cell captures counties that have low case ratio and also have fewer older adults as proportion of total population. The upper right cell shows counties with the highest proportion of older adults and the highest case load. 
+
+Do you think we can fit Trumbo's principles to this data? Which of the three broad categories do you think apply here the best. Do you think a bivariate choropleth map is good choice here, or you would like to combine the two variables in another way. Even if you think that a strict application of Trumbo's scheme is not feasible, it is a good idea to still retain it as a loose organizing principle.  
+
+Let us continue our investigation and try a data-based apparoch. A number of clustering approaches are available including k-means, probabilistic (also called model-based), and dissimilarity-based in R. We will try k-means. One of our variables, the count of older adults per 1000 persons, is an order of magnitude higher than the other variable, number of cases per 1000 persons. So, the k-means algorithm will disproportionately lean towards  the number of older adults. To make the two variables comparable you can instead take the number of older adults per 100 persons. If you are still concerned about the unequal variance, standardize the two variables. K-means is a very well studied algorithm, so it is easy to find out about its strength and weaknesses with a simple Google search. 
+```{r}
+df1 = data.frame('x' = x/10, 'y' = y)
+df1.kmeans = kmeans(df1, 6, iter.max = 100)
+df1['Cluster'] = df1.kmeans$cluster
+
+ggplot(data = df1) + geom_point(aes(x = x, y=y, color = Cluster)) +
+scale_y_continuous(breaks = c(5, 10, 15, 25, 50)) + scale_y_continuous(limits = c(0, 110), breaks = c(5, 10, 15, 30, 60, 90)) +
+  geom_hline(yintercept = c(5, 10, 15), linetype = 'dashed', color = 'red') + geom_vline(xintercept = c(10, 20, 30), linetype = 'dashed') + xlab('Older adults per 100') + ylab('Case per 1000') 
+```
+So, this looks very different from the one based on exogeneous categories. You can imagine that how you discritize or cluster your attributes will have a significant imapct on how your map looks like and therefore you should think hard before deciding on the categories. 
+
+## 2.3. Bivariate and multivariate maps
+Let us now try to make a few maps. Recall that there are several options to create bivariate and multivariate maps such as mapping one variable to a color scheme and another to the size of a symbol. However, if you have a very dense map, such as the map of the counties in the US, a number of these options are not viable. In such cases, mapping the two variables to a bivariate color schemes remains one of the few viable choices.   
+
+If you want to see for yourself, get the centroid of each polygon and use it to place the symbol in the middle of each polygon. So, map cases per 1000 to a color scheme and the older adults per 1000 to the size of a symbol. Compare a state level map, where this approach will work very well, with a county level map, where it will not, especially in the eastern half. We will not try it here and will instead look at the bivariate map.   
+
+Let us see how we can discritize cases per 1000. Refer back to what we discussed in the context of a single variable map. 
+```{r}
+grQ = classIntervals(covid.county.total$CasesPer1000, n = 5, style = 'quantile')
+grJ = classIntervals(covid.county.total$CasesPer1000, n=5, style = 'jenks')
+
+
+display.brewer.pal(5, 'BuGn')  
+display.brewer.pal(5, 'Greys')
+display.brewer.pal(5, 'YlGnBu')    # I prefer 1- or 2-colors for sequential
+
+par(mfrow = c(1,3))
+colPal1 = brewer.pal(5, 'BuGn')
+plot(grJ, colPal1, main = 'Jenks Intervals', xlab = 'No of Cases', ylab = 'Relative Frequency')
+colPal2 = brewer.pal(5, 'Greys')
+plot(grQ, colPal2, main = 'Quantile Intervals', xlab = 'No of Cases', ylab = 'Relative Frequency')
+```
+This figure is not helpful. We do not get an idea of the distribution at lower case values. If you want to understand the distribution better, try to visualize in small intervals so that you get sufficinet resolution. Let us first explore with exogeneous categories. Divide the case ratio in three categories: less than 5 per thousand, 5 and 10, above 10. Similarly, divide the number of older adults is less than 10, between 10 and 20, and between 20 and 35 per 100 persons. 
+
+Before we make our map let us develop our color scheme and see how it will map to the categories we plan. We try the RColorBrewer first in the code section below, but the results are not good. They show divergent scheme which is not appropriate for us. So, we will try to create a color scheme outselves. Note that Turmbo's principle says that in a bi-variate color scheme marginals as well as joint distribution should make sense, so if you move along column, row, or diagonal there should be a proper color scheme along each. More often, we are interested in highlighting a few cells - say the four conrners in a 3-by-3 table, or the cells along the right diagonal in a 3-by-3 scheme. If this is the case, you should focus more on getting a proper color scheme for the corresponding cells.  
+
+Ideally your discritization should not be very sensitive to small perturbations in the boundaries, so you should carefully look at the counties that are close to partition boundaries. In particular, counties that are adjacent to each other in space and are on the either side of the partition boundary in discritized attribute space deserve close attention. See Brewer and Pickle, 2002 (); Sun et al., 2016. Viewers often look for spatial clusters in maps with many areal units. 
+
+```{r}
+# First let us try RColorBrewer
+d=expand.grid(x=1:3,y=1:3)
+d=merge(d,data.frame(x=1:3,xlabel=c("X low", "X middle","X high")),by="x")
+d=merge(d,data.frame(y=1:3,ylabel=c("Y low", "Y middle","Y high")),by="y")
+
+colpal.bi = brewer.pal(9, 'Paired') 
+d['Col'] = colpal.bi
+
+ggplot(d, aes(x, y, fill = Col)) + scale_fill_manual(values = d$Col) + geom_tile()
+
+# This is not good, let us try something ourselves - create shades 
+red.shades = c(rgb(139/255, 0, 0), rgb(205/255, 0, 0), rgb(255/255, 0,0))
+
+covid.county.total['GroupCaseRatio'] = cut(covid.county.total$CasesPer1000, breaks = c(0, 5, 10, 200), include.lowest = TRUE, labels = c('A', 'B', 'C'))
+
+ggplot(data = covid.county.total) + geom_sf(data = covid.county.total, aes(fill = GroupCaseRatio)) + scale_fill_manual(values = red.shades)
+
+covid.county.total['GroupOlderRatio'] = cut(covid.county.total$old_proportion, breaks = c(0, 0.1, 0.2, 0.4), include.lowest = TRUE, labels = c('1', '2', '3'))
+
+ggplot(data = covid.county.total) + geom_sf(data = covid.county.total, aes(fill = GroupOlderRatio)) + scale_fill_manual(values = red.shades)
+
+
+```
+Let us map case ratio to shades of blue and the proportion of older adults to the shades of red and combine the two to create our bivariate color scheme. I am following this approach of coding so that you can easily modify blue and red and experiment with other colors too. 
+
+You can superimpose state boundaries and remove or significantly dilute county boundaries, if you would like to provide an idea of the variability within each state. 
+
+```{r}
+sub.df = covid.county.total[c('GroupCaseRatio', 'GroupOlderRatio')]
+st_geometry(sub.df) = NULL
+
+covid.county.total['Bivariate'] = apply(sub.df, 1, function(x) paste(x[1], x[2], sep='') )
+
+case.ratio.shades = matrix(c(152/255, 251/255, 152/255, 144/255, 238/255, 144/255, 50/255, 205/255,50/255), nrow = 3)
+older.adult.shades = matrix(c(255/255, 182/255, 193/255, 255/255, 105/255, 180/255, 255/255, 20/255, 147/255), nrow = 3)
+
+col.mat = apply(older.adult.shades, 2, function (x) (1/2)*(case.ratio.shades + x))
+col.mat = cbind(col.mat[1:3,], col.mat[4:6,], col.mat[7:9,])
+
+bivariate.category = sort(unique(covid.county.total$Bivariate))
+print(bivariate.category)
+
+bivariate.category = bivariate.category[-(4)]
+
+covid.county.total['Bivariate_color'] = rep(NA, dim(covid.county.total)[1])
+
+for (i in 1:length(bivariate.category)){
+  index = covid.county.total$Bivariate == bivariate.category[i]
+  tmp = col.mat[,i]
+  covid.county.total$Bivariate_color[index] = rgb(tmp[1], tmp[2], tmp[3])
+}
+
+```
+Now let us create a bivariate map with the color scheme and also print the legend as a grid.
+
+```{r}
+# Plot legend
+d=expand.grid(x=1:3,y=1:3)
+d=merge(d,data.frame(x=1:3,xlabel=c("X low", "X middle","X high")),by="x")
+d=merge(d,data.frame(y=1:3,ylabel=c("Y low", "Y middle","Y high")),by="y")
+
+colpal.bi  = vector(length=9)
+for (i in 1:9) {
+  tmp = col.mat[,i]
+colpal.bi[i] = rgb(tmp[1], tmp[2], tmp[3])
+
+}
+d['Col'] = colpal.bi
+ggplot(d) + geom_tile(aes(x, y, fill = Col)) + scale_fill_manual(values = d$Col) 
+
+
+ggplot(data = covid.county.total) + geom_sf(aes(fill=Bivariate_color), color='white', size=0.1) + scale_fill_manual(values = d$Col)
+
+
+```
+It seems that colors are all over the spectrum with little structure demanding more attention from a reader. You can use available pcakages **pals** and **biscale**, but the functionalities are very basic. Instead, you might like to work with the code above and try different modifications to the variables the variables case.ratio.shades and older.adults.shades to get a satisfactory color scheme.  
+
+It seems to me that we should highlight the areas where both case ratio and the proportion of older adults are higher. Suppose you want to highlight areas that have somewhat higher (what do we mean by higher?) case ratio and has relatively higher population of older adults. 
+
+``` {r}
+
+biclass_data = bi_class(covid.county.total, CasesPer1000, old_proportion, style = 'quantile', dim=3)
+
+mapPlot = ggplot() + geom_sf(data = biclass_data, mapping = aes(fill = bi_class), show.legend = FALSE) +
+  bi_scale_fill(pal = "DkBlue", dim = 3) + bi_theme()
+
+legend = bi_legend(pal = "DkBlue",
+                    dim = 3,
+                    xlab = "Case-Ratio ",
+                    ylab = "Older Adults",
+                    size = 6)
+
+ggdraw(xlim = c(0,1), ylim = c(0,1)) + draw_plot(mapPlot, 0, 0, .75, .75) + draw_plot(legend, 0.6, 0.1, 0.2, 0.3)
+
+```
+
+We can use the color schemes we got from above to our data. But, make sure you understand which color is getting mapped to which category. I am not very careful below
+
+
+```{r}
+
+col.auto = bi_class(covid.county.total, CasesPer1000, old_proportion, style = 'quantile', dim=3)
+col.auto = unique(col.auto$Bivariate_color)
+col.auto = col.auto[1:9]
+
+ggplot(data = covid.county.total) + geom_sf(aes(fill=Bivariate_color), color='white', size=0.1) + scale_fill_manual(values = col.auto)
+
+
+
+covid.county.total['Bivariate_color2'] = rep(NA, dim(covid.county.total)[1])
+
+for (i in 1:length(bivariate.category)){
+  index = covid.county.total$Bivariate == bivariate.category[i]
+  tmp = col.auto[i]
+  covid.county.total$Bivariate_color2[index] = tmp
+}
+
+ggplot(data = covid.county.total) + geom_sf(aes(fill=Bivariate_color2), color='white', size=0.1) + scale_fill_manual(values = col.auto) +labs(fill = 'Case per 1000')
+
+```
+
+Despite diluting the county boundaries, I feel that this county level map is too crowded, especially in the eastern half of the country. We can instead create a raster map by smoothing the data. There are non-trivial choices that go into a smoothing technique. This is not the place to disucss it, but if you do decide to follow it please think through it carefully.    
+
+You can aslo explore local clusters with anomalous values in each state. A popular choice is the Getis-Ord G*. You can use the R package 'spdep' to estimate the metric at a county level with case ratio. We will instead create a metric similar to what is known as location quotient in economic geography and try to identify clusters of relatively high values in each state. We are defining anomalies within each state. State is a good higher level unit here because containment and lockdown policies are state specific.     
+
