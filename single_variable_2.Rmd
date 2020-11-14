@@ -5,11 +5,11 @@ date: "5/28/2020"
 output: html_document
 ---
 ## 1.1. Mapping Case Count
-Recall the two points that we discussed. The first was that we need a high-level notion of what do we want our map to communicate (or some idea about what do we want to explore). And the second point was that given a certain data - spatial configuration and attribute values - and our objectives, how can we narraow down to one or more optimum maps? 
+Recall the two points that we discussed. The first was that we need a high-level notion of what do we want our map to communicate (or some idea about what do we want to explore). And the second point was that given a certain data - spatial configuration and attribute values - and our objectives, how can we narrow down to one or more optimum maps? 
 
 We want to create a map showing spatial distribution of total covid cases at state level. Recall that this is a cumulative total upto the latest date available in the data. We will not try to answer the second question precisely (I am not sure if a precise answer exists or even desirable), but we will try to develop certain princples that can help us narrow down to a small number of options.
 
-Load the state-level covid count data that we saved as GeoPackage. If you are a regular GIS user you might like to use GeoPackage more often and get rid of arcane shapefile, if you still use it. 
+Load the state-level covid count data that we saved as GeoPackage. If you are a regular GIS user you might like to use GeoPackage more often and get rid of the highly restricted shapefile, if you still use it. 
 ```{r, echo=FALSE, result='hide', warning=FALSE, message=FALSE}
 invisible(lapply(c('sp', 'sf', 'classInt', 'RColorBrewer', 'ggplot2', 'leaflet', 'tidycensus', 'data.table', 'dplyr', 'tigris'), require, character.only=TRUE))
 state.total = st_read('/Users/manishve/Desktop/covid.gpkg', quiet=TRUE)
