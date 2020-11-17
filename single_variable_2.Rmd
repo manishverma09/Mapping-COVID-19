@@ -93,7 +93,7 @@ gt+ geom_text(aes(label = state_abbr, x = longitude, y = latitude), size=3) + xl
 
  
 ```
-You would perhaps like to see the parititon plot we created earlier and the map above together. You can try 'cowplot' or 'gridExtra'. If you want to format axix lables see this (https://stackoverflow.com/questions/11610377/how-do-i-change-the-formatting-of-numbers-on-an-axis-with-ggplot). You must be wondering that with web-based mapping we can easily provide more information. We will try that in later, for now let us pursue the static map option a bit further. 
+You would perhaps like to see the parititon plot we created earlier and the map above together. You can try 'cowplot' or 'gridExtra'. If you want to format axis lables see this (https://stackoverflow.com/questions/11610377/how-do-i-change-the-formatting-of-numbers-on-an-axis-with-ggplot). You must be wondering that with web-based mapping we can easily provide more information. We will try that later, for now let us pursue the static map option a bit further. 
 
 ## 1.2. Mapping Case Ratio 
 One of the reasons that case count has such a skewed distribution is the difference in population. Let us try and normalize count with state level population. We will use 2010 census population. Download the data, normalize case count with the population, then follow the steps above, and prepare a map with case count per 1000 persons. If you want, you can normalize it in the opposite direction by how many people per case. 
