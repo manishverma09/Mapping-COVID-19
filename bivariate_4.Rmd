@@ -7,8 +7,8 @@ output: html_document
 ## 2. Mapping Case Ratio at County Level
 We will work with county level data now. We will follow the same approach here that we did in the case of a single variable map, but in addition to a choropleth map we will also explore alternatives for static bivariate maps. In the later part of this exercise, we will make web-maps that can incorporate bivariate maps and more information via pop-ups and adjacent graphs that you often see at news media websites. As we develop our approche we will try to seek a connection between formal spatial modeling and map visualization. I will be using terms such as risk quite loosely, and you should not interpret it as a precisely defined epidemiological risk at a given time.  
 
-We know that cetrius peribus older adults have much higher hospitalization and mortality rates, if infected. Let us try to create maps that help us understand and investigate the spatial distribution of risk to the older adults. I am not careful in defining our objectives very precisely here, but if you are working on a real project, you would like to have more sharpely defined objectives and goals. 
-Let us first read the data from the New York Times github site.  You will have to run some basic checks to make sure that we understand the data well. Specify the 'column class' argument in the read.csv function. Otherwise, the county fips code gets read as integer. This stips the leading zero from fips code making it a four digit code for some states and counties. County fips code should be 'SSCCC', with the first two for state and next three for county. So, specify a column class for at least 'fips'.
+We know that cetrius peribus older adults have much higher hospitalization and mortality rates, if infected. Let us try to create maps that help us understand and investigate the spatial distribution of risk to the older adults. I am not careful in defining our objectives very precisely here, but if you are working on a real project, you would like to have more sharply defined objectives and goals. 
+Let us first read the data from the New York Times github site.  You will have to run some basic checks to make sure that we understand the data well. Specify the 'column class' argument in the read.csv function. Otherwise, the county fips code gets read as integer. This strips away the leading zero from fips code making it a four digit code for some states and counties. County fips code should be 'SSCCC', with the first two letters for state and next three for county. So, specify a column class for at least 'fips'.
 
 http://lenkiefer.com/2017/04/24/bivariate-map/
 https://rpubs.com/apsteinmetz/prek
@@ -65,7 +65,7 @@ Total!!Female!!85 years and over    	P012049
 
 There are no counts for some counties, I want to include these so that we get a complete map for lower 48. 
 
-For those of you interested in GIS, we are saving the file this time as a SpatiLite file. This is another good option for spatial data, in addition to GeoPackage that we used in the last exercise. SpatiaLite is built on top of SQLite and allows SQL queries. Read about it here https://www.gaia-gis.it/fossil/libspatialite/index. If you want to open the file in QGIS just drag and drop it.
+For those of you interested in GIS, we are saving the file this time as a SpatiaLite file. This is another good option for spatial data, in addition to GeoPackage that we used in the last exercise. SpatiaLite is built on top of SQLite and allows SQL queries. Read about it here https://www.gaia-gis.it/fossil/libspatialite/index. If you want to open the file in QGIS just drag and drop it.
 
 Some counties have no data for COVID cases. NAs will create artefacts in maps, so let us set NAs to zero. This is an arbitrary decision for this class. Ideally you would like to deal with it in a principled way, most likely show it in your map as a separate category with 'No Data' label.  
 
