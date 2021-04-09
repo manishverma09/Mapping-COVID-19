@@ -86,7 +86,7 @@ plot(caseratio.cum, main = 'Case Ratio', xlab = 'Cases per 1000 persons')
 ```
 Given these two variables we need to decide how to categorize them and map one of them to a color scheme and the other to the size of a symbol. In the case of single variable choropleth map, I argued against nonlinear transformation of the data. But, if I have to do a transformation, I generally find^[I do not know if rigorous studies confirm this] that a log10 is easy to understand.  
 
- I will choose 5 clusters for all the subsequent analysis, but you must remember that this is a  'free parameter' in your chloropleth map. Ideally you would like to "experiment" a bit and narrow down to something that strikes a balance between faithfully representing the information and condensing it in a few categories so that your reader can quickly grasp the message. 
+ I will choose 5 clusters for all the subsequent analysis, but you must remember that this is a  'free parameter' in your choropleth map. Ideally you would like to "experiment" a bit and narrow down to something that strikes a balance between faithfully representing the information and condensing it in a few categories so that your reader can quickly grasp the message. 
 
 ```{r}
 grQ = classIntervals(state.total$cases, n = 5, style = 'quantile')
@@ -114,7 +114,7 @@ tail(state.total)
 
 ```
 
-Now plot with different options. You would perhaps like to see the parititon plot we created earlier and the map above together. You can try 'cowplot' or 'gridExtra'. If you want to format axix lables see this (https://stackoverflow.com/questions/11610377/how-do-i-change-the-formatting-of-numbers-on-an-axis-with-ggplot). 
+Now plot with different options. You would perhaps like to see the partition plot we created earlier and the map above together. You can try 'cowplot' or 'gridExtra'. If you want to format axix labels see this (https://stackoverflow.com/questions/11610377/how-do-i-change-the-formatting-of-numbers-on-an-axis-with-ggplot). 
 
 ```{r}
 # If you know mutate, try to use it on state.total instead of the code above
