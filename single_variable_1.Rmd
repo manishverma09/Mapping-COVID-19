@@ -38,12 +38,13 @@ We want to read the data and attach geographical and population information from
 fileName = 'covid-19-data/us-states.csv'
 print(fread(fileName, nrows = 1))
 
+# Or use read_csv from the readr package
 covid.state = read.csv(fileName, stringsAsFactors = FALSE, colClasses = c('Date', 'character', 'character', 'integer', 'integer'))
 head(covid.state)
 covid.state = covid.state[c('date',  'fips', 'cases', 'deaths')]
 
 ```
-Let us do some sanity checks, including some visualization, and get familiar with the data. We want to aggregate the data over time for each state so that we get the latest total number of cases and deaths. Note that we are choosing the maxinum number of cases below, assuming that it represents the cumulative total. We are also assuming that we have complete data for each state. Based on what we see in the data and the plot below for Michigan, both are reasonable assumptions, but please read more about the data at the NYTIMES github site if you actually intend to use this data for research.   
+Let us do some sanity checks, including some visualization, and get familiar with the data. We want to aggregate the data over time for each state so that we get the latest total number of cases and deaths. Note that we are choosing the maximuum number of cases below, assuming that it represents the cumulative total. We are also assuming that we have complete data for each state. Based on what we see in the data and the plot below for Michigan, both are reasonable assumptions, but please read more about the data at the NYTIMES github site if you actually intend to use this data for research.   
 
 ```{r}
 head(covid.state[order(covid.state$cases),])      
@@ -61,7 +62,7 @@ covid.state.total = covid.state.total[!is.na(covid.state.total$cases),]
 ```
 Now download Census data. We need state level geometries and total population since we will examine the spatial distribution of state level case counts relative to total population. Census annually updates any changes in boundaries and you might find at least some changes for smaller census units such as blocks and tracts. Here I am downloading the data for the default year, which I think is 2018 (read tidycensus documentation). The boundary files for 2019 are not yet available as of May 1, 2020, but check out this site https://www.census.gov/geographies/mapping-files/time-series/geo/carto-boundary-file.html. We are downloading a coarse resolution (1:5 million) state boundary file so that R can display our maps fast. You can choose the default 1:500 k resolution, which takes up about four times more memory, takes more time to display, but gives you better accuracy. 
 
-In the interest of time we will work with only the contiguous USA (the lower-48) since R takes a lot more time to display maps with Alaska, Hawaii, and island territories. We will need two letters code for each state, attach it to the sf object.     
+In the interest of time we will work with only the contiguous USA (the lower-48) since R takes a lot more time to display maps with Alaska, Hawaii, and the island territories. We will need two letters code for each state, attach it to the sf object.     
 
 ```{r, echo=FALSE, results='hide', warning=FALSE, message=FALSE}
 us.state = states (cb = TRUE, resolution = '5m', year=2018, class = 'sf')
